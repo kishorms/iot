@@ -1,0 +1,262 @@
+
+
+/*
+ * All Header File
+ * project Status:
+ * Last open (modify): jan 26 - 12.05pm
+ * Run : ok
+ * Query :
+ *  live  sim card Testing Pending
+ *  GPS full pending
+ *  android app ok
+ *
+
+*/
+
+#include <Wire.h> // I2C library, gyroscope
+// Accelerometer ADXL345
+#define ACC (0xA7>>1)    //ADXL345 ACC address
+#define A_TO_READ (6)        //num of bytes we are going to read each time (two bytes for each axis)
+//-----------------------------------
+//Blutooth
+//NO Hededer
+char data = 0;                //Variable for storing received data Bluetooth
+//bt pins 0,1
+//-----------------------------------
+//GSM SIM800
+#include <SoftwareSerial.h>
+SoftwareSerial gsm(2,3); //tx rx
+int flag=0,flag1=0,flag2=0;
+char phone_no[] = "7249255034";  // home no
+char phone_no1[] = "9422731629";
+//-----------------------------------
+/*
+ *
+ *
+ */
+
+ 
+long lat,lon; // create variable for latitude and longitude object
+
+SoftwareSerial gpsSerial(2, 3); // create gps sensor connection
+TinyGPS gps; // create gps object
+void setup() {
+  // put your setup code here, to run once:
+//----------------------------
+// for Accelerometer..
+Serial.begin(9600);
+Wire.begin();
+initAcc();
+//---------------------------
+//for buethooth
+pinMode(13, OUTPUT);        //Sets digital pin 13 as output pin if bluetooth available and
+//---------------------------
+//for SIM800
+Serial.begin(9600); 
+  gsm.begin(9600);
+//---------------------------
+ gpsSerial.begin(4800); // connect gps sensor
+}
+
+/*
+ *  Code- Home Atomation (Basic V1.0) * BETA version
+ *
+ *  Coder - Kishor M Sonawane
+ *  Download the App :
+ *  This program make by MAC+tech Software Solution.
+
+
+bluetooth connection:-
+Arduino Pins           Bluetooth Pins
+RX (Pin 0)     ———->      TX
+TX (Pin 1)     ———->      RX
+5V             ———->      VCC
+GND            ———->      GND
+
+
+ */
+
+
+
+
+
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  //call Accelerometer code ... but when bluet connected
+  // and if manual swich on...
+ // Acci_detect(); //<---- this call
+
+ gps();
+/*
+ * Bluetooth
+ */
+if(Serial.available() > 0)      // Send data only when you receive data:
+  {
+   data = Serial.read();      //Read the incoming data and store it into variable data come from pin 0 & 1
+  }
+  
+    Serial.print(data);        //Print Value inside data in Serial monitor
+    Serial.print("\n");        //New line
+    if(data == '1')            //Checks whether value of data is equal to 1
+    {
+      digitalWrite(13, HIGH);  //If value is 1 then LED turns ON
+      Acci_detect();           // to Detect Continue Accident....
+    }
+    else if(data == '0')       //Checks whether value of data is equal to 0
+     { digitalWrite(13, LOW);   //If value is 0 then LED turns OFF
+     }
+                        
+
+ 
+}
+
+/*
+ * Accelerometer
+ */
+
+void initAcc() {
+//Turning on the ADXL345
+writeTo(ACC, 0x2D, 1<<3);     
+writeTo(ACC, 0x31, 0x0B);
+writeTo(ACC, 0x2C, 0x09);
+//by default the device is in +-2g range reading
+}
+
+void getAccelerometerData(int * result) {
+int regAddress = 0x32;    //first axis-acceleration-data register on the ADXL345
+byte buff[A_TO_READ];
+readFrom(ACC, regAddress, A_TO_READ, buff); //read the acceleration data from the ADXL345
+//each axis reading comes in 10 bit resolution, ie 2 bytes.  Least Significat Byte first!!
+//thus we are converting both bytes in to one int
+result[0] = (((int)buff[1]) << 8) | buff[0];  
+result[1] = (((int)buff[3])<< 8) | buff[2];
+result[2] = (((int)buff[5]) << 8) | buff[4];
+}
+
+
+void Acci_detect()
+{
+
+/* Doc By MAC+tech
+ *  // Accident Setect by Accelerometer
+**********************************
+interface:
+
+Ardiuno         ADXL345
+GND             GND
+3.3v            VCC
+3.3v            CS
+A4              SDA
+A5              SCL
+
+
+**********************************
+*/
+int hx,hy,hz;
+int acc[3];
+getAccelerometerData(acc);
+hx = acc[0];
+hy = acc[1];
+hz = acc[2];
+Serial.print(" X=");
+Serial.print(hx);
+Serial.print(" Y=");
+Serial.print(hy);
+Serial.print(" Z=");
+Serial.println(hz);
+
+if((hx>150) || (hy>150) || (hx<-150)||(hy<-150))
+{
+  Serial.println("Accident Detected.");
+  //call to send sms
+delay(3000);
+ if(data == '1')            //Checks whether value of data is equal to 1
+    {
+      digitalWrite(13, HIGH);  //If value is 1 then LED turns ON
+     // Acci_detect();           // to Detect Continue Accident....
+     send_sms();
+    }
+ 
+}
+
+delay(1000);
+}
+
+//---------------- Functions
+//Writes val to address register on ACC
+void writeTo(int DEVICE, byte address, byte val) {
+ Wire.beginTransmission(DEVICE); //start transmission to ACC
+ Wire.write(address);        // send register address
+ Wire.write(val);        // send value to write
+ Wire.endTransmission(); //end transmission
+}
+//reads num bytes starting from address register on ACC in to buff array
+void readFrom(int DEVICE, byte address, int num, byte buff[]) {
+Wire.beginTransmission(DEVICE); //start transmission to ACC
+Wire.write(address);        //sends address to read from
+Wire.endTransmission(); //end transmission
+
+Wire.beginTransmission(DEVICE); //start transmission to ACC
+Wire.requestFrom(DEVICE, num);    // request 6 bytes from ACC
+int i = 0;
+while(Wire.available())    //ACC may send less than requested (abnormal)
+{
+  buff[i] = Wire.read(); // receive a byte
+  i++;
+}
+Wire.endTransmission(); //end transmission
+
+}
+
+
+/*
+ *  SEND SMS CODE and Functions:
+ *  use SIM 800
+ */
+
+void send_sms()
+{
+   delay(300);
+
+  Serial.println("AT+CMGF=1");
+  gsm.println("AT+CMGF=1");
+  delay(2000);
+  Serial.print("AT+CMGS=\"");
+  gsm.print("AT+CMGS=\"");
+  Serial.print("Testing ok");
+  gsm.print(phone_no);
+  Serial.write(0x22);
+  gsm.write(0x22);
+  Serial.write(0x0D);
+  gsm.write(0x0D);// hex equivalent of Carraige return
+  Serial.write(0x0A);
+  gsm.write(0x0A);// hex equivalent of newline
+  delay(2000);
+  /*
+   * Send Any sms Write on gsm.print method....
+   * hare  change loc
+   */
+  Serial.print("Vehical: GJ XX CC XXXX \n Accident Location :20.025003, 73.998250 Map: https://www.latlong.net/c/?lat=20.025003&long=73.998250");
+  gsm.print("Vehical: GJ XX CC XXXX Accident Location :"+lat+", "+lon+" Map: https://www.latlong.net/c/?lat="+lat+"&long="+lon+" ");
+  //---------------------------------------------------------------------
+  delay(500);
+  Serial.println (char(26));//the ASCII code of the ctrl+z is 26
+  gsm.println (char(26));
+}
+
+/*
+ *  GPS code
+ */
+void gps()
+{
+  while(gpsSerial.available()){ // check for gps data
+   if(gps.encode(gpsSerial.read())){ // encode gps data
+    gps.get_position(&lat,&lon); // get latitude and longitude
+    // display position
+    Serial.print("Position: ");
+    Serial.print("lat: ");Serial.print(lat);Serial.print(" ");// print latitude
+    Serial.print("lon: ");Serial.println(lon); // print longitude
+   }
+  }
+}
